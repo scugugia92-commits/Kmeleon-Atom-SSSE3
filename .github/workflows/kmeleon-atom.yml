@@ -56,26 +56,96 @@ jobs:
             zip
             unzip
 
-      - name: Verifica Autoconf 2.13
-        shell: msys2 {0}
-        run: |
-          echo "=================================="
-          echo "VERIFICA AUTOCONF 2.13"
-          echo "=================================="
-
-          which autoconf-2.13
-          autoconf-2.13 --version
-
-          echo "VERIFICA MAKE"
-          make --version
-
-          echo "VERIFICA PYTHON 2.7"
-          /c/Python27/python.exe --version
-
-      - name: Prepara configurazione Intel Atom Z520
+      - name: Individua compilatore e linker Microsoft
         shell: pwsh
         run: |
-          $config = @'
+          Write-Host "VERIFICA TOOLCHAIN MICROSOFT"
+
+          $compiler = (Get-Command cl.exe).Source
+
+          $compilerDir = Split-Path $compiler
+
+          $linker = Join-Path $compilerDir "link.exe"
+
+          if (!(Test-Path $compiler)) {
+            throw "Compilatore Microsoft non trovato"
+          }
+
+          if (!(Test-Path $linker)) {
+            throw "Linker Microsoft non trovato"
+          }
+
+          Write-Host "COMPILATORE:"
+          Write-Host $compiler
+
+          Write-Host "LINKER:"
+          Write-Host $linker
+
+          Write-Host "VERSIONE LINKER:"
+          & $linker /?
+
+          Write-Host "VERSIONE COMPILATORE:"
+          & $compiler /?
+
+          $compilerUnix = $compiler.Replace("\", "/")
+          $linkerUnix = $linker.Replace("\", "/")
+
+          "MSVC_CC=$compilerUnix" |
+            Out-File $env:GITHUB_ENV -Append
+
+          "MSVC_LD=$linkerUnix" |
+            Out-File $env:GITHUB_ENV -Append
+
+          Write-Host "Toolchain individuata"
+
+      - name: Verifica ottimizzazioni Intel Atom
+        shell: cmd
+        run: |
+          echo ======================================
+          echo INTEL ATOM Z520
+          echo ARCHITETTURA BONNELL
+          echo WINDOWS 7 32 BIT
+          echo ======================================
+
+          where cl
+          where link
+          where clang
+
+          echo int main(void) { return 0; } > atom.cpp
+
+          cl /nologo /O2 /arch:SSE2 /favor:ATOM /c atom.cpp
+
+          if not exist atom.obj exit /b 1
+
+          echo TEST MICROSOFT ATOM SUPERATO
+
+      - name: Verifica Clang Bonnell SSSE3
+        shell: pwsh
+        run: |
+          Write-Host "VERIFICA CLANG BONNELL SSSE3"
+
+          Set-Content atom-test.c `
+            "int main(void) { return 0; }"
+
+          clang `
+            -target i686-pc-windows-msvc `
+            -march=bonnell `
+            -mtune=bonnell `
+            -mssse3 `
+            -O2 `
+            -c atom-test.c `
+            -o atom-test.obj
+
+          if (!(Test-Path atom-test.obj)) {
+            throw "Test Bonnell SSSE3 fallito"
+          }
+
+          Write-Host "TEST BONNELL SSSE3 SUPERATO"
+
+      - name: Prepara configurazione Goanna Atom Z520
+        shell: pwsh
+        run: |
+          $config = @"
           mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-atom-z520
           mk_add_options MOZ_MAKE_FLAGS="-j4"
 
@@ -90,41 +160,56 @@ jobs:
           ac_add_options --disable-updater
 
           ac_add_options --enable-optimize="/O2 /arch:SSE2 /favor:ATOM"
-          '@
 
-          Set-Content -Path goanna/.mozconfig `
-            -Value $config -Encoding ASCII
+          export CC="$env:MSVC_CC"
+          export CXX="$env:MSVC_CC"
+          export LD="$env:MSVC_LD"
+          "@
 
-          Write-Host "CONFIGURAZIONE ATOM Z520"
+          Set-Content `
+            -Path goanna/.mozconfig `
+            -Value $config `
+            -Encoding ASCII
+
+          Write-Host "CONFIGURAZIONE GOANNA:"
           Get-Content goanna/.mozconfig
 
-      - name: Verifica compilatore Atom
-        shell: cmd
+      - name: Verifica linker ambiente MSYS2
+        shell: msys2 {0}
         run: |
-          echo =====================================
-          echo TARGET INTEL ATOM Z520
-          echo WINDOWS 7 32 BIT
-          echo =====================================
+          echo "===================================="
+          echo "CONTROLLO LINKER MSYS2"
+          echo "===================================="
 
-          where cl
-          where link
+          echo "LINKER NEL PATH:"
+          which link || true
 
-          echo int main(void) { return 0; } > atom.cpp
+          echo "COMPILATORE NEL PATH:"
+          which cl || true
 
-          cl /nologo /O2 /arch:SSE2 /favor:ATOM /c atom.cpp
+          echo "LINKER MICROSOFT SELEZIONATO:"
+          echo "$MSVC_LD"
 
-          if not exist atom.obj exit /b 1
+          if [ ! -f "$MSVC_LD" ]; then
+            echo "ERRORE: linker Microsoft non trovato"
+            exit 1
+          fi
 
-          echo TEST COMPILATORE SUPERATO
+          echo "VERSIONE LINKER MICROSOFT:"
+
+          "$MSVC_LD" -v 2>&1 || true
+
+          echo "CONTROLLO COMPLETATO"
 
       - name: Compila motore Goanna
         shell: msys2 {0}
         run: |
-          echo "====================================="
-          echo "K-MELEON GOANNA"
+          echo "===================================="
+          echo "K-MELEON 76 GOANNA"
           echo "INTEL ATOM Z520"
+          echo "BONNELL SSSE3"
           echo "WINDOWS 7 32 BIT"
-          echo "====================================="
+          echo "===================================="
 
           export PATH="/c/Python27:/c/Python27/Scripts:$PATH"
 
@@ -132,20 +217,23 @@ jobs:
           export MOZ_PYTHON="C:/Python27/python.exe"
 
           export WANT_AUTOCONF=2.13
-
           export CONFIG_SITE=/dev/null
 
-          echo "CONTROLLO PYTHON"
+          export CC="$MSVC_CC"
+          export CXX="$MSVC_CC"
+          export LD="$MSVC_LD"
+
+          echo "PYTHON:"
           python --version
 
-          echo "CONTROLLO AUTOCONF"
+          echo "AUTOCONF:"
           autoconf-2.13 --version
 
-          echo "CONTROLLO MAKE"
-          make --version
+          echo "COMPILATORE:"
+          echo "$CC"
 
-          echo "CONTROLLO COMPILATORE"
-          which cl || true
+          echo "LINKER:"
+          echo "$LD"
 
           echo "AVVIO COMPILAZIONE GOANNA"
 
@@ -168,11 +256,16 @@ jobs:
         shell: pwsh
         run: |
           if (Test-Path goanna-build.log) {
+
             Write-Host "ULTIME 200 RIGHE COMPILAZIONE"
+
             Get-Content goanna-build.log -Tail 200
+
           }
           else {
-            Write-Host "Registro compilazione non presente"
+
+            Write-Host "REGISTRO COMPILAZIONE NON PRESENTE"
+
           }
 
       - name: Salva registro compilazione
@@ -186,7 +279,7 @@ jobs:
             goanna/obj-atom-z520/config.log
           if-no-files-found: warn
 
-      - name: Salva motore compilato
+      - name: Salva motore Goanna compilato
         if: success()
         uses: actions/upload-artifact@v4
         with:
