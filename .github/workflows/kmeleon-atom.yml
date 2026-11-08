@@ -4,10 +4,11 @@ on:
   workflow_dispatch:
 
 jobs:
-  verifica-compilatore:
+  prepara-compilazione:
     runs-on: windows-2022
 
     steps:
+
       - name: Scarica motore Goanna
         uses: actions/checkout@v4
         with:
@@ -15,7 +16,7 @@ jobs:
           ref: kmeleon76
           path: goanna
 
-      - name: Scarica K-Meleon
+      - name: Scarica interfaccia K-Meleon
         uses: actions/checkout@v4
         with:
           repository: roytam1/kmeleon
@@ -26,39 +27,122 @@ jobs:
         with:
           arch: amd64_x86
 
-      - name: Verifica compilatori
+      - name: Verifica compilatore Intel Atom
         shell: cmd
         run: |
-          echo ===========================
+          echo ====================================
+          echo K-MELEON 76 GOANNA
           echo INTEL ATOM Z520
           echo WINDOWS 7 32 BIT
-          echo ===========================
+          echo ====================================
 
           where cl
           where link
-          where msbuild
           where clang
 
-          echo int main(void) { return 0; } > test.cpp 
-          cl /nologo /O2 /arch:SSE2 /favor:ATOM /Bv /c test.cpp
+          echo int main(void) { return 0; } > test.cpp
 
-      - name: Verifica supporto ottimizzazioni Atom
+          cl /nologo /O2 /arch:SSE2 /favor:ATOM /c test.cpp
+
+          if not exist test.obj exit /b 1
+
+          echo Compilazione x86 Atom completata
+
+      - name: Verifica supporto Clang Bonnell
         shell: pwsh
         run: |
-          Write-Host "TARGET: Intel Atom Z520"
-          Write-Host "ARCHITETTURA: Bonnell"
-          Write-Host "ISTRUZIONI: SSE2 SSE3 SSSE3"
-          Write-Host "SISTEMA: Windows 7 x86"
+          Write-Host "Verifica Intel Atom Bonnell / SSSE3"
 
           clang --version
 
-          clang -target i686-pc-windows-msvc -march=bonnell -### -c -x c NUL 2>&1 | Out-String | Write-Host
+          $source = "int main(void) { return 0; }"
 
-      - name: Verifica struttura sorgenti
+          Set-Content -Path atom-test.c -Value $source
+
+          clang `
+            -target i686-pc-windows-msvc `
+            -march=bonnell `
+            -mtune=bonnell `
+            -mssse3 `
+            -O2 `
+            -c atom-test.c `
+            -o atom-test.obj
+
+          if (!(Test-Path atom-test.obj)) {
+            throw "Compilazione Bonnell fallita"
+          }
+
+          Write-Host "Test Bonnell SSSE3 completato"
+
+      - name: Prepara configurazione Goanna
         shell: pwsh
         run: |
-          Write-Host "Sorgenti Goanna:"
-          Get-ChildItem goanna -Name | Select-Object -First 20
+          $mozconfig = @'
+          mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-atom-z520
+          mk_add_options MOZ_MAKE_FLAGS="-j4"
 
-          Write-Host "Sorgenti K-Meleon:"
-          Get-ChildItem kmeleon -Name | Select-Object -First 20
+          ac_add_options --enable-application=xulrunner
+          ac_add_options --target=i686-pc-mingw32
+
+          ac_add_options --disable-debug
+          ac_add_options --disable-tests
+          ac_add_options --disable-updater
+
+          ac_add_options --enable-optimize="/O2 /arch:SSE2 /favor:ATOM"
+          '@
+
+          Set-Content `
+            -Path goanna/.mozconfig `
+            -Value $mozconfig `
+            -Encoding ASCII
+
+          Write-Host "Configurazione Goanna creata"
+          Get-Content goanna/.mozconfig
+
+      - name: Verifica sistema compilazione
+        shell: pwsh
+        run: |
+          Write-Host "CONTROLLO SORGENTI GOANNA"
+
+          $files = @(
+            "goanna/mach",
+            "goanna/client.mk",
+            "goanna/configure.in",
+            "goanna/js/src",
+            "goanna/layout",
+            "goanna/gfx"
+          )
+
+          foreach ($file in $files) {
+            if (Test-Path $file) {
+              Write-Host "OK: $file"
+            }
+            else {
+              Write-Host "MANCANTE: $file"
+            }
+          }
+
+          Write-Host "CONTROLLO K-MELEON"
+
+          Get-ChildItem kmeleon -Name |
+            Select-Object -First 20
+
+          Write-Host "VERSIONE PYTHON"
+
+          python --version
+
+          Write-Host "CONTROLLO MAKE"
+
+          Get-Command mozmake, make, mingw32-make `
+            -ErrorAction SilentlyContinue |
+            Select-Object Name, Source
+
+      - name: Salva configurazione Atom Z520
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kmeleon-Z520-Configurazione
+          path: |
+            goanna/.mozconfig
+            atom-test.obj
+            test.obj
+          if-no-files-found: warn
