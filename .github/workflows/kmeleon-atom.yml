@@ -75,16 +75,27 @@ jobs:
 
           if not exist atom.obj exit /b 1
 
-      - name: Tenta compilazione motore Goanna
+            - name: Tenta compilazione motore Goanna
         shell: cmd
         run: |
-          cd goanna
+          echo ======================================
+          echo K-MELEON GOANNA ATOM Z520 SSSE3
+          echo ======================================
+
+          set "PATH=C:\Python27;C:\Python27\Scripts;%PATH%"
+          set "PYTHON=C:\Python27\python.exe"
+          set "MOZ_PYTHON=C:\Python27\python.exe"
+
+          echo VERIFICA PYTHON
+
+          where python
+          python --version
 
           echo AVVIO COMPILAZIONE GOANNA
-          echo TARGET WINDOWS 32 BIT
-          echo CPU INTEL ATOM Z520
 
-          C:\Python27\python.exe mach build > ..\goanna-build.log 2>&1
+          cd goanna
+
+          python mach build > ..\goanna-build.log 2>&1
 
           set RESULT=%ERRORLEVEL%
 
