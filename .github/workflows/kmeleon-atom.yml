@@ -1,0 +1,51 @@
+name: K-Meleon Atom Z520 SSSE3
+
+on:
+  workflow_dispatch:
+
+jobs:
+  verifica-ambiente:
+    runs-on: windows-2022
+
+    steps:
+      - name: Scarica il motore Goanna
+        uses: actions/checkout@v4
+        with:
+          repository: roytam1/palemoon27
+          ref: kmeleon76
+          path: goanna
+
+      - name: Scarica interfaccia K-Meleon
+        uses: actions/checkout@v4
+        with:
+          repository: roytam1/kmeleon
+          path: kmeleon
+
+      - name: Verifica compilatore Windows
+        shell: cmd
+        run: |
+          echo Verifica strumenti di compilazione
+          where cl
+          where msbuild
+          where clang
+          echo Verifica completata
+
+      - name: Mostra informazioni CPU target
+        shell: cmd
+        run: |
+          echo Target Intel Atom Z520
+          echo Architettura Bonnell x86 32 bit
+          echo Istruzioni SSE2 SSE3 SSSE3
+          echo Sistema operativo Windows 7 SP1 32 bit
+
+      - name: Salva rapporto
+        shell: pwsh
+        run: |
+          "Verifica ambiente GitHub Actions completata" |
+            Out-File rapporto.txt
+
+      - name: Carica rapporto
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifica-atom-z520
+          path: rapporto.txt
