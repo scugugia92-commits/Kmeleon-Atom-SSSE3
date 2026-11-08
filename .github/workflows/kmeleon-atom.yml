@@ -39,7 +39,8 @@ jobs:
           where msbuild
           where clang
 
-          cl /Bv
+          echo int main(void) { return 0; } > test.cpp 
+          cl /nologo /O2 /arch:SSE2 /favor:ATOM /Bv /c test.cpp
 
       - name: Verifica supporto ottimizzazioni Atom
         shell: pwsh
