@@ -56,16 +56,14 @@ jobs:
             zip
             unzip
 
-      - name: Individua compilatore e linker Microsoft
+      - name: Individua toolchain Microsoft
         shell: pwsh
         run: |
-          Write-Host "VERIFICA TOOLCHAIN MICROSOFT"
-
           $compiler = (Get-Command cl.exe).Source
 
-          $compilerDir = Split-Path $compiler
+          $directory = Split-Path $compiler
 
-          $linker = Join-Path $compilerDir "link.exe"
+          $linker = Join-Path $directory "link.exe"
 
           if (!(Test-Path $compiler)) {
             throw "Compilatore Microsoft non trovato"
@@ -81,12 +79,6 @@ jobs:
           Write-Host "LINKER:"
           Write-Host $linker
 
-          Write-Host "VERSIONE LINKER:"
-          & $linker /?
-
-          Write-Host "VERSIONE COMPILATORE:"
-          & $compiler /?
-
           $compilerUnix = $compiler.Replace("\", "/")
           $linkerUnix = $linker.Replace("\", "/")
 
@@ -96,56 +88,26 @@ jobs:
           "MSVC_LD=$linkerUnix" |
             Out-File $env:GITHUB_ENV -Append
 
-          Write-Host "Toolchain individuata"
-
-      - name: Verifica ottimizzazioni Intel Atom
+      - name: Verifica compilazione Windows Atom
         shell: cmd
         run: |
           echo ======================================
           echo INTEL ATOM Z520
-          echo ARCHITETTURA BONNELL
           echo WINDOWS 7 32 BIT
           echo ======================================
 
-          where cl
-          where link
-          where clang
-
           echo int main(void) { return 0; } > atom.cpp
 
-          cl /nologo /O2 /arch:SSE2 /favor:ATOM /c atom.cpp
+          cl /nologo /O2 /arch:SSE2 /favor:ATOM atom.cpp /Fe:atom.exe
 
-          if not exist atom.obj exit /b 1
+          if not exist atom.exe exit /b 1
 
-          echo TEST MICROSOFT ATOM SUPERATO
+          echo COMPILAZIONE E LINK MICROSOFT RIUSCITI
 
-      - name: Verifica Clang Bonnell SSSE3
+      - name: Prepara configurazione Goanna
         shell: pwsh
         run: |
-          Write-Host "VERIFICA CLANG BONNELL SSSE3"
-
-          Set-Content atom-test.c `
-            "int main(void) { return 0; }"
-
-          clang `
-            -target i686-pc-windows-msvc `
-            -march=bonnell `
-            -mtune=bonnell `
-            -mssse3 `
-            -O2 `
-            -c atom-test.c `
-            -o atom-test.obj
-
-          if (!(Test-Path atom-test.obj)) {
-            throw "Test Bonnell SSSE3 fallito"
-          }
-
-          Write-Host "TEST BONNELL SSSE3 SUPERATO"
-
-      - name: Prepara configurazione Goanna Atom Z520
-        shell: pwsh
-        run: |
-          $config = @"
+          $config = @'
           mk_add_options MOZ_OBJDIR=@TOPSRCDIR@/obj-atom-z520
           mk_add_options MOZ_MAKE_FLAGS="-j4"
 
@@ -160,56 +122,65 @@ jobs:
           ac_add_options --disable-updater
 
           ac_add_options --enable-optimize="/O2 /arch:SSE2 /favor:ATOM"
-
-          export CC="$env:MSVC_CC"
-          export CXX="$env:MSVC_CC"
-          export LD="$env:MSVC_LD"
-          "@
+          '@
 
           Set-Content `
             -Path goanna/.mozconfig `
             -Value $config `
             -Encoding ASCII
 
-          Write-Host "CONFIGURAZIONE GOANNA:"
           Get-Content goanna/.mozconfig
 
-      - name: Verifica linker ambiente MSYS2
+      - name: Verifica compilatore dentro MSYS2
         shell: msys2 {0}
         run: |
-          echo "===================================="
-          echo "CONTROLLO LINKER MSYS2"
-          echo "===================================="
+          echo "======================================"
+          echo "VERIFICA TOOLCHAIN MSYS2"
+          echo "======================================"
 
-          echo "LINKER NEL PATH:"
-          which link || true
+          export PATH="/c/Python27:/c/Python27/Scripts:$PATH"
 
-          echo "COMPILATORE NEL PATH:"
-          which cl || true
+          export CC="$MSVC_CC"
+          export CXX="$MSVC_CC"
+          export LD="$MSVC_LD"
 
-          echo "LINKER MICROSOFT SELEZIONATO:"
-          echo "$MSVC_LD"
+          echo "COMPILATORE:"
+          echo "$CC"
 
-          if [ ! -f "$MSVC_LD" ]; then
-            echo "ERRORE: linker Microsoft non trovato"
+          echo "LINKER:"
+          echo "$LD"
+
+          echo "PYTHON:"
+          python --version
+
+          echo "AUTOCONF:"
+          autoconf-2.13 --version
+
+          echo "VERIFICA COMPILAZIONE"
+
+          printf 'int main(void) {return 0;}\n' > test-msys.c
+
+          "$CC" -nologo -c test-msys.c -Fotest-msys.obj
+
+          echo "VERIFICA LINKER"
+
+          "$LD" -NOLOGO -OUT:test-msys.exe test-msys.obj
+
+          if [ ! -f test-msys.exe ]; then
+            echo "ERRORE: impossibile creare eseguibile"
             exit 1
           fi
 
-          echo "VERSIONE LINKER MICROSOFT:"
-
-          "$MSVC_LD" -v 2>&1 || true
-
-          echo "CONTROLLO COMPLETATO"
+          echo "TEST MSYS2 COMPLETATO"
 
       - name: Compila motore Goanna
         shell: msys2 {0}
         run: |
-          echo "===================================="
+          echo "======================================"
           echo "K-MELEON 76 GOANNA"
           echo "INTEL ATOM Z520"
-          echo "BONNELL SSSE3"
           echo "WINDOWS 7 32 BIT"
-          echo "===================================="
+          echo "======================================"
 
           export PATH="/c/Python27:/c/Python27/Scripts:$PATH"
 
@@ -222,12 +193,6 @@ jobs:
           export CC="$MSVC_CC"
           export CXX="$MSVC_CC"
           export LD="$MSVC_LD"
-
-          echo "PYTHON:"
-          python --version
-
-          echo "AUTOCONF:"
-          autoconf-2.13 --version
 
           echo "COMPILATORE:"
           echo "$CC"
@@ -251,33 +216,62 @@ jobs:
 
           exit $RESULT
 
-      - name: Mostra errori compilazione
+      - name: Analizza errori configurazione
         if: always()
         shell: pwsh
         run: |
+          Write-Host "======================================"
+          Write-Host "DIAGNOSTICA GOANNA"
+          Write-Host "======================================"
+
           if (Test-Path goanna-build.log) {
+            Write-Host "ULTIME 120 RIGHE BUILD"
+            Get-Content goanna-build.log -Tail 120
+          }
 
-            Write-Host "ULTIME 200 RIGHE COMPILAZIONE"
+          $logs = Get-ChildItem goanna `
+            -Filter config.log `
+            -Recurse `
+            -File `
+            -ErrorAction SilentlyContinue
 
-            Get-Content goanna-build.log -Tail 200
+          if ($logs) {
+            foreach ($log in $logs) {
+              Write-Host "================================"
+              Write-Host "CONFIG LOG:"
+              Write-Host $log.FullName
+              Write-Host "================================"
 
+              Get-Content $log.FullName -Tail 180
+            }
           }
           else {
-
-            Write-Host "REGISTRO COMPILAZIONE NON PRESENTE"
-
+            Write-Host "Nessun config.log trovato"
           }
 
-      - name: Salva registro compilazione
+      - name: Salva diagnostica completa
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Kmeleon-Atom-Z520-Build-Log
+          name: Kmeleon-Z520-Diagnostica
           path: |
             goanna-build.log
             goanna/.mozconfig
-            goanna/obj-atom-z520/config.log
+            goanna/**/config.log
           if-no-files-found: warn
+
+      - name: Verifica risultato compilazione
+        if: success()
+        shell: pwsh
+        run: |
+          $bin = "goanna/obj-atom-z520/dist/bin"
+
+          if (!(Test-Path $bin)) {
+            throw "La cartella del motore compilato non esiste"
+          }
+
+          Get-ChildItem $bin -Recurse |
+            Select-Object -First 50
 
       - name: Salva motore Goanna compilato
         if: success()
@@ -285,4 +279,4 @@ jobs:
         with:
           name: Goanna-Atom-Z520
           path: goanna/obj-atom-z520/dist/bin/
-          if-no-files-found: warn
+          if-no-files-found: error
