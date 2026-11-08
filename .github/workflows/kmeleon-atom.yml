@@ -64,7 +64,6 @@ jobs:
           echo "=================================="
 
           which autoconf-2.13
-
           autoconf-2.13 --version
 
           echo "VERIFICA MAKE"
@@ -72,8 +71,6 @@ jobs:
 
           echo "VERIFICA PYTHON 2.7"
           /c/Python27/python.exe --version
-
-          echo "VERIFICA COMPLETATA"
 
       - name: Prepara configurazione Intel Atom Z520
         shell: pwsh
@@ -83,6 +80,10 @@ jobs:
           mk_add_options MOZ_MAKE_FLAGS="-j4"
 
           ac_add_options --enable-application=xulrunner
+
+          ac_add_options --build=i686-pc-mingw32
+          ac_add_options --host=i686-pc-mingw32
+          ac_add_options --target=i686-pc-mingw32
 
           ac_add_options --disable-debug
           ac_add_options --disable-tests
@@ -132,6 +133,8 @@ jobs:
 
           export WANT_AUTOCONF=2.13
 
+          export CONFIG_SITE=/dev/null
+
           echo "CONTROLLO PYTHON"
           python --version
 
@@ -180,6 +183,7 @@ jobs:
           path: |
             goanna-build.log
             goanna/.mozconfig
+            goanna/obj-atom-z520/config.log
           if-no-files-found: warn
 
       - name: Salva motore compilato
