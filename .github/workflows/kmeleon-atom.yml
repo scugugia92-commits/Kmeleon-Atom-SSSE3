@@ -4,48 +4,60 @@ on:
   workflow_dispatch:
 
 jobs:
-  verifica-ambiente:
+  verifica-compilatore:
     runs-on: windows-2022
 
     steps:
-      - name: Scarica il motore Goanna
+      - name: Scarica motore Goanna
         uses: actions/checkout@v4
         with:
           repository: roytam1/palemoon27
           ref: kmeleon76
           path: goanna
 
-      - name: Scarica interfaccia K-Meleon
+      - name: Scarica K-Meleon
         uses: actions/checkout@v4
         with:
           repository: roytam1/kmeleon
           path: kmeleon
 
-      - name: Verifica compilatore Windows
+      - name: Attiva compilatore Microsoft x86
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: amd64_x86
+
+      - name: Verifica compilatori
         shell: cmd
         run: |
-          echo Verifica strumenti di compilazione
+          echo ===========================
+          echo INTEL ATOM Z520
+          echo WINDOWS 7 32 BIT
+          echo ===========================
+
           where cl
+          where link
           where msbuild
           where clang
-          echo Verifica completata
 
-      - name: Mostra informazioni CPU target
-        shell: cmd
-        run: |
-          echo Target Intel Atom Z520
-          echo Architettura Bonnell x86 32 bit
-          echo Istruzioni SSE2 SSE3 SSSE3
-          echo Sistema operativo Windows 7 SP1 32 bit
+          cl /Bv
 
-      - name: Salva rapporto
+      - name: Verifica supporto ottimizzazioni Atom
         shell: pwsh
         run: |
-          "Verifica ambiente GitHub Actions completata" |
-            Out-File rapporto.txt
+          Write-Host "TARGET: Intel Atom Z520"
+          Write-Host "ARCHITETTURA: Bonnell"
+          Write-Host "ISTRUZIONI: SSE2 SSE3 SSSE3"
+          Write-Host "SISTEMA: Windows 7 x86"
 
-      - name: Carica rapporto
-        uses: actions/upload-artifact@v4
-        with:
-          name: verifica-atom-z520
-          path: rapporto.txt
+          clang --version
+
+          clang -target i686-pc-windows-msvc -march=bonnell -### -c -x c NUL 2>&1 | Out-String | Write-Host
+
+      - name: Verifica struttura sorgenti
+        shell: pwsh
+        run: |
+          Write-Host "Sorgenti Goanna:"
+          Get-ChildItem goanna -Name | Select-Object -First 20
+
+          Write-Host "Sorgenti K-Meleon:"
+          Get-ChildItem kmeleon -Name | Select-Object -First 20
