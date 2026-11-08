@@ -9,6 +9,7 @@ jobs:
     timeout-minutes: 180
 
     steps:
+
       - name: Scarica sorgenti Goanna
         uses: actions/checkout@v4
         with:
@@ -22,7 +23,7 @@ jobs:
           repository: roytam1/kmeleon
           path: kmeleon
 
-      - name: Attiva compilatore Windows x86
+      - name: Attiva compilatore Microsoft x86
         uses: ilammy/msvc-dev-cmd@v1
         with:
           arch: amd64_x86
@@ -38,7 +39,43 @@ jobs:
 
           & "C:\Python27\python.exe" --version
 
-      - name: Prepara configurazione Atom Z520
+      - name: Installa MSYS2 e Autoconf 2.13
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MSYS
+          update: false
+          path-type: inherit
+          install: >-
+            autoconf2.13
+            autoconf-wrapper
+            make
+            m4
+            perl
+            patch
+            diffutils
+            zip
+            unzip
+
+      - name: Verifica Autoconf 2.13
+        shell: msys2 {0}
+        run: |
+          echo "=================================="
+          echo "VERIFICA AUTOCONF 2.13"
+          echo "=================================="
+
+          which autoconf-2.13
+
+          autoconf-2.13 --version
+
+          echo "VERIFICA MAKE"
+          make --version
+
+          echo "VERIFICA PYTHON 2.7"
+          /c/Python27/python.exe --version
+
+          echo "VERIFICA COMPLETATA"
+
+      - name: Prepara configurazione Intel Atom Z520
         shell: pwsh
         run: |
           $config = @'
@@ -46,7 +83,6 @@ jobs:
           mk_add_options MOZ_MAKE_FLAGS="-j4"
 
           ac_add_options --enable-application=xulrunner
-          ac_add_options --target=i686-pc-mingw32
 
           ac_add_options --disable-debug
           ac_add_options --disable-tests
@@ -58,16 +94,19 @@ jobs:
           Set-Content -Path goanna/.mozconfig `
             -Value $config -Encoding ASCII
 
-          Write-Host "Configurazione Atom Z520:"
+          Write-Host "CONFIGURAZIONE ATOM Z520"
           Get-Content goanna/.mozconfig
 
-      - name: Verifica compilatore Intel Atom
+      - name: Verifica compilatore Atom
         shell: cmd
         run: |
+          echo =====================================
+          echo TARGET INTEL ATOM Z520
+          echo WINDOWS 7 32 BIT
+          echo =====================================
+
           where cl
           where link
-          where clang
-          where make
 
           echo int main(void) { return 0; } > atom.cpp
 
@@ -75,45 +114,62 @@ jobs:
 
           if not exist atom.obj exit /b 1
 
-          echo Test compilatore Intel Atom superato
+          echo TEST COMPILATORE SUPERATO
 
-      - name: Attiva Python 2.7 e compila Goanna
-        shell: cmd
+      - name: Compila motore Goanna
+        shell: msys2 {0}
         run: |
-          echo ======================================
-          echo K-MELEON GOANNA ATOM Z520 SSSE3
-          echo ======================================
+          echo "====================================="
+          echo "K-MELEON GOANNA"
+          echo "INTEL ATOM Z520"
+          echo "WINDOWS 7 32 BIT"
+          echo "====================================="
 
-          set "PATH=C:\Python27;C:\Python27\Scripts;%PATH%"
-          set "PYTHON=C:\Python27\python.exe"
-          set "MOZ_PYTHON=C:\Python27\python.exe"
+          export PATH="/c/Python27:/c/Python27/Scripts:$PATH"
 
-          echo VERIFICA VERSIONE PYTHON
-          where python
+          export PYTHON="C:/Python27/python.exe"
+          export MOZ_PYTHON="C:/Python27/python.exe"
+
+          export WANT_AUTOCONF=2.13
+
+          echo "CONTROLLO PYTHON"
           python --version
 
-          echo AVVIO COMPILAZIONE GOANNA
+          echo "CONTROLLO AUTOCONF"
+          autoconf-2.13 --version
+
+          echo "CONTROLLO MAKE"
+          make --version
+
+          echo "CONTROLLO COMPILATORE"
+          which cl || true
+
+          echo "AVVIO COMPILAZIONE GOANNA"
 
           cd goanna
 
-          python mach build > ..\goanna-build.log 2>&1
+          set +e
 
-          set RESULT=%ERRORLEVEL%
+          python mach build > ../goanna-build.log 2>&1
 
-          type ..\goanna-build.log
+          RESULT=$?
 
-          exit /b %RESULT%
+          set -e
+
+          cat ../goanna-build.log
+
+          exit $RESULT
 
       - name: Mostra errori compilazione
         if: always()
         shell: pwsh
         run: |
           if (Test-Path goanna-build.log) {
-            Write-Host "ULTIME 150 RIGHE DELLA COMPILAZIONE"
-            Get-Content goanna-build.log -Tail 150
+            Write-Host "ULTIME 200 RIGHE COMPILAZIONE"
+            Get-Content goanna-build.log -Tail 200
           }
           else {
-            Write-Host "Compilazione non avviata"
+            Write-Host "Registro compilazione non presente"
           }
 
       - name: Salva registro compilazione
@@ -126,7 +182,7 @@ jobs:
             goanna/.mozconfig
           if-no-files-found: warn
 
-      - name: Salva motore Goanna compilato
+      - name: Salva motore compilato
         if: success()
         uses: actions/upload-artifact@v4
         with:
